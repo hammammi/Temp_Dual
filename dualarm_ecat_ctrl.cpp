@@ -25,8 +25,8 @@
 #include "ecat_dc.h"
 
 #define EC_TIMEOUTMON 500
-#define NUMOFMANI_DRIVE     1
-#define NUMOFWHEEL_DRIVE    1
+#define NUMOFMANI_DRIVE     7
+#define NUMOFWHEEL_DRIVE    4
 #define NUMOFEPOS4_DRIVE	NUMOFMANI_DRIVE + NUMOFWHEEL_DRIVE
 #define NUMOFMANI_DRIVE_HALF     NUMOFMANI_DRIVE/2
 #define NSEC_PER_SEC 1000000000
@@ -103,7 +103,7 @@ boolean ecat_init(void)
         {
             rt_printf("%d slaves found and configured.\n", ec_slavecount);
 
-            for (int k=2; k<(NUMOFMANI_DRIVE+2); ++k)
+            for (int k=1; k<(NUMOFMANI_DRIVE+1); ++k)
             {
                 if (( ec_slavecount >= 1 ) && (strcmp(ec_slave[k].name,"EPOS4") == 0)) //change name for other drives
                 {
@@ -216,7 +216,7 @@ boolean ecat_init(void)
                     wkc_count=ec_SDOwrite(k, 0x3142, 0x01, FALSE, os, &ob3, EC_TIMEOUTRXM);
                 }
             }
-            for (int k=(NUMOFMANI_DRIVE+2); k<(NUMOFEPOS4_DRIVE+2); ++k)
+            for (int k=(NUMOFMANI_DRIVE+1); k<(NUMOFEPOS4_DRIVE+1); ++k)
             {
                 if (( ec_slavecount >= 1 ) && (strcmp(ec_slave[k].name,"EPOS4") == 0)) //change name for other drives
                 {
@@ -355,8 +355,8 @@ boolean ecat_init(void)
                 rt_printf("Operational state reached for all slaves.\n");
                 for (int k=0; k<NUMOFEPOS4_DRIVE; ++k)
                 {
-                    epos4_drive_pt[k].ptOutParam=(EPOS4_DRIVE_RxPDO_t*)  ec_slave[k+2].outputs;
-                    epos4_drive_pt[k].ptInParam= (EPOS4_DRIVE_TxPDO_t*)  ec_slave[k+2].inputs;
+                    epos4_drive_pt[k].ptOutParam=(EPOS4_DRIVE_RxPDO_t*)  ec_slave[k+1].outputs;
+                    epos4_drive_pt[k].ptInParam= (EPOS4_DRIVE_TxPDO_t*)  ec_slave[k+1].inputs;
                 }
                 inOP = TRUE;
             }
@@ -366,14 +366,14 @@ boolean ecat_init(void)
                 ec_readstate();
                 for (i=0; i<(ec_slavecount); i++)
                 {
-                    if (ec_slave[i+2].state != EC_STATE_OPERATIONAL)
+                    if (ec_slave[i+1].state != EC_STATE_OPERATIONAL)
                     {
                         printf("Slave %d State 0x%2.2x StatusCode=0x%4.4x : %s\n",
-                               i, ec_slave[i+2].state, ec_slave[i+2].ALstatuscode, ec_ALstatuscode2string(ec_slave[i+2].ALstatuscode));
+                               i, ec_slave[i+1].state, ec_slave[i+1].ALstatuscode, ec_ALstatuscode2string(ec_slave[i+1].ALstatuscode));
                     }
                 }
                 for (i=0; i<NUMOFEPOS4_DRIVE; i++)
-                    ec_dcsync0(i+2, FALSE, 0, 0);
+                    ec_dcsync0(i+1, FALSE, 0, 0);
             }
         }
         else
@@ -412,7 +412,7 @@ void EPOS_OP(void *arg)
     long long diff_dc32;
 
     for (i=0; i<NUMOFEPOS4_DRIVE; ++i)
-        ec_dcsync0(i+2, TRUE, cycle_ns, 0);
+        ec_dcsync0(i+1, TRUE, cycle_ns, 0);
 
     RTIME cycletime = cycle_ns;
     RTIME cur_time = 0; // current master time
@@ -599,7 +599,7 @@ void EPOS_OP(void *arg)
     rt_task_sleep(cycle_ns);
 
     for (i=0; i<NUMOFEPOS4_DRIVE; i++)
-        ec_dcsync0(i+2, FALSE, 0, 0); // SYNC0,1 on slave 1
+        ec_dcsync0(i+1, FALSE, 0, 0); // SYNC0,1 on slave 1
 
     //Servo OFF
     for (i=0; i<NUMOFEPOS4_DRIVE; i++)
@@ -664,7 +664,7 @@ void pub_run(void *arg)
             else
             {
                 itime++;
-                rt_printf("Time = %06d.%01d, \e[32;1m fail=%ld\e[0m, ecat_T=%ld, maxT=%ld\n",
+                rt_printf("\nTime = %06d.%01d, \e[32;1m fail=%ld\e[0m, ecat_T=%ld, maxT=%ld\n",
                           itime/10, itime%10, recv_fail_cnt, ethercat_time/1000, worst_time/1000);
                 for( i=0; i<NUMOFMANI_DRIVE; i++)
                 {
@@ -672,7 +672,7 @@ void pub_run(void *arg)
                     rt_printf("Statusword = 0x%x\n", epos4_drive_pt[i].ptInParam->StatusWord);
                     rt_printf("Actual/Target = %i / %i\n" , epos4_drive_pt[i].ptInParam->PositionActualValue, epos4_drive_pt[i].ptOutParam->TargetPosition);
 //                    rt_printf("Following error = %i\n" , epos4_drive_pt[i].ptInParam->PositionActualValue-epos4_drive_pt[i].ptOutParam->TargetPosition);
-                    msg.position[i] = epos4_drive_pt[i].ptInParam->PositionActualValue;
+                    msg.position[i] = epos4_drive_pt[i].ptInParam->VelocityActualValue;
                     rt_printf("\n");
                 }
                 for ( i=NUMOFMANI_DRIVE;i<NUMOFEPOS4_DRIVE;i++)
@@ -713,47 +713,47 @@ void traj_time(int32_t msgpos[])
 }
 
 
-void motion_callback(const ethercat_test::pos& msg)
-{
-    for (int i=0; i<NUMOFMANI_DRIVE; i++)
-    {
-        desinc[i] = msg.position[i] + homepos[i];
-        rt_printf("%i, targetpos = %i,%i\n" ,i, msg.position[i],homepos[i]);
-    }
-    traj_time(desinc);
-//    ROS_INFO("Joint #\tTime\tPresent\tTarget");
-    for (int i=0; i<NUMOFEPOS4_DRIVE; ++i)
-    {
-//        ROS_INFO("%d\t%.3fs\t%d\t%d", i, (t1[i]+t2[i])/1000.0, zeropos[i],desinc[i]);
-    }
-    gt = 0;
-    memcpy(targetpos, &desinc, sizeof(desinc));
-}
-
-//void motion_callback(const control_msgs::FollowJointTrajectoryActionGoal::ConstPtr& msg)
+//void motion_callback(const ethercat_test::pos& msg)
 //{
-//
-//    std::vector<trajectory_msgs::JointTrajectoryPoint>::size_type traj = msg->goal.trajectory.points.size();
-//    int pos_desired[traj-1][NUMOFEPOS4_DRIVE] = {0};
-//    double pos_desired_rad[traj-1][NUMOFEPOS4_DRIVE] = {0};
-//
-//
-//    for (int j=1;j<traj;++j){
-//
-//        for (int i=0; i<NUMOFEPOS4_DRIVE; i++)
-//        {
-//            pos_desired_rad[j-1][i] = msg->goal.trajectory.points[j].positions[i];
-//            pos_desired[j-1][i] = pos_desired_rad[j-1][i]*2*pulse_rev[i]*gear_ratio[i]/M_PI;  // unit convert
-//            desinc[i] = pos_desired[j-1][i] + homepos[i];
-//            rt_printf("%i, targetpos = %i, %i,%i\n" ,i, pos_desired_rad[j-1][i], pos_desired[j-1][i],homepos[i]);
-//        }
-//        traj_time(desinc);
-//
-//        gt = 0;
-//        memcpy(targetpos, &desinc, sizeof(desinc));
-//
+//    for (int i=0; i<NUMOFMANI_DRIVE; i++)
+//    {
+//        desinc[i] = msg.position[i] + homepos[i];
+//        rt_printf("%i, targetpos = %i,%i\n" ,i, msg.position[i],homepos[i]);
 //    }
+//    traj_time(desinc);
+////    ROS_INFO("Joint #\tTime\tPresent\tTarget");
+//    for (int i=0; i<NUMOFEPOS4_DRIVE; ++i)
+//    {
+////        ROS_INFO("%d\t%.3fs\t%d\t%d", i, (t1[i]+t2[i])/1000.0, zeropos[i],desinc[i]);
+//    }
+//    gt = 0;
+//    memcpy(targetpos, &desinc, sizeof(desinc));
 //}
+
+void motion_callback(const control_msgs::FollowJointTrajectoryActionGoal::ConstPtr& msg)
+{
+
+    std::vector<trajectory_msgs::JointTrajectoryPoint>::size_type traj = msg->goal.trajectory.points.size();
+    int pos_desired[traj-1][NUMOFMANI_DRIVE] = {0};
+    double pos_desired_rad[traj-1][NUMOFMANI_DRIVE] = {0};
+
+
+    for (int j=1;j<traj;++j){
+
+        for (int i=0; i<NUMOFMANI_DRIVE; i++)
+        {
+            pos_desired_rad[j-1][i] = msg->goal.trajectory.points[j].positions[i];
+            pos_desired[j-1][i] = pos_desired_rad[j-1][i]*2*pulse_rev[i]*gear_ratio[i]/M_PI;  // unit convert
+            desinc[i] = pos_desired[j-1][i] + homepos[i];
+            rt_printf("%i, targetpos = %i, %i,%i\n" ,i, pos_desired_rad[j-1][i], pos_desired[j-1][i],homepos[i]);
+        }
+        traj_time(desinc);
+
+        gt = 0;
+        memcpy(targetpos, &desinc, sizeof(desinc));
+
+    }
+}
 //void motion_callback2(const ethercat_test::pos& msg)
 //{
 //    for (int i=NUMOFMANI_DRIVE_HALF; i<NUMOFMANI_DRIVE; ++i)
